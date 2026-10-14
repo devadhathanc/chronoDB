@@ -1,0 +1,16 @@
+[package]
+name = "chronodb"
+version = "0.1.0"
+edition = "2021"
+description = "A small time-travel relational database engine"
+
+[lib]
+name = "chronodb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "chronodb"
+path = "src/main.rs"
+
+[profile.dev]
+opt-level = 1

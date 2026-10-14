@@ -1,0 +1,1153 @@
+================================================================================
+                        CHRONODB TEST CASE SUITE
+                     Comprehensive Testing Framework
+================================================================================
+
+TEST CATEGORIES:
+  L1 = Unit Tests (Module-level)
+  L2 = Integration Tests (Multi-module)
+  L3 = Edge Cases & Boundary Tests
+  L4 = Concurrency Tests (MVCC)
+  L5 = Crash Recovery Tests (WAL)
+  L6 = Stress / Performance Tests
+  L7 = Time-Travel Tests
+  L8 = Branch / Diff / Merge Tests
+
+TOTAL: 250+ test cases across 8 categories
+================================================================================
+TEST CASE L1.1.01: Basic Keyword Recognition
+  Input:    "SELECT * FROM users"
+  Expected: [Select, Star, From, Identifier("users"), Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.02: Case-Insensitive Keywords
+  Input:    "select * from USERS"
+  Expected: [Select, Star, From, Identifier("USERS"), Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.03: Numeric Literals (Integer)
+  Input:    "SELECT * FROM users WHERE age = 25"
+  Expected: ... Equal, NumberLiteral(25), Eof
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.04: Numeric Literals (Float)
+  Input:    "SELECT * FROM products WHERE price = 19.99"
+  Expected: ... Equal, NumberLiteral(19.99), Eof
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.05: String Literals (Single Quotes)
+  Input:    "SELECT * FROM users WHERE name = 'Alice'"
+  Expected: ... Equal, StringLiteral("Alice"), Eof
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.06: String Literals (Double Quotes)
+  Input:    "SELECT * FROM users WHERE name = \"Bob\""
+  Expected: ... Equal, StringLiteral("Bob"), Eof
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.07: String with Escaped Quotes
+  Input:    "SELECT * FROM t WHERE x = 'It\'s a test'"
+  Expected: ... StringLiteral("It's a test"), Eof
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.08: Two-Character Operators
+  Input:    "SELECT * FROM t WHERE x != 5 AND y >= 3 AND z <= 10"
+  Expected: ... NotEqual, NumberLiteral(5), And, GreaterEq,
+              NumberLiteral(3), And, LessEq, NumberLiteral(10)
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.09: Parentheses and Commas
+  Input:    "CREATE TABLE t (a INT, b INT)"
+  Expected: [Create, Table, Identifier("t"), LeftParen,
+              Identifier("a"), Integer, Comma,
+              Identifier("b"), Integer, RightParen, Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.10: Empty Input
+  Input:    ""
+  Expected: [Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.11: Whitespace-Only Input
+  Input:    "   \t\n  "
+  Expected: [Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.12: Semicolon Termination
+  Input:    "SELECT * FROM users;"
+  Expected: [Select, Star, From, Identifier("users"), Semicolon, Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.13: Multiple Statements (Semicolons)
+  Input:    "SELECT 1; SELECT 2;"
+  Expected: [Select, NumberLiteral(1), Semicolon,
+              Select, NumberLiteral(2), Semicolon, Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.14: Timestamp Literal
+  Input:    "SELECT * FROM t AS OF '2026-10-01 14:30:00'"
+  Expected: ... As, Of, StringLiteral("2026-10-01 14:30:00")
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.15: Identifier with Underscore
+  Input:    "SELECT first_name FROM user_table"
+  Expected: [Select, Identifier("first_name"), From,
+              Identifier("user_table"), Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.16: Special Branch Commands
+  Input:    "CREATE BRANCH staging FROM main"
+  Expected: [Create, Branch, Identifier("staging"), From,
+              Identifier("main"), Eof]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.17: Invalid Character
+  Input:    "SELECT # FROM users"
+  Expected: Error: Unexpected character '#' at position 7
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.18: Unterminated String
+  Input:    "SELECT * FROM t WHERE x = 'hello"
+  Expected: Error: Unterminated string literal
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.19: Very Long Identifier
+  Input:    "SELECT very_long_column_name_that_is_200_chars... FROM t"
+  Expected: [Select, Identifier("very_long_column..."), From, ...]
+  Status:   PASS / FAIL
+
+TEST CASE L1.1.20: Negative Numbers
+  Input:    "SELECT * FROM t WHERE x = -5"
+  Expected: ... Equal, NumberLiteral(-5) OR
+              ... Equal, Minus, NumberLiteral(5)
+  Status:   PASS / FAIL (depending on design)
+TEST CASE L1.2.01: CREATE TABLE - Simple
+  Input:    "CREATE TABLE users (id INT PRIMARY KEY, name STRING, age INT)"
+  Expected: CreateTableStmt {
+              table: "users",
+              columns: [
+                {name:"id", type:Int, primary_key:true, not_null:false},
+                {name:"name", type:String, primary_key:false, not_null:false},
+                {name:"age", type:Int, primary_key:false, not_null:false}
+              ]
+            }
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.02: CREATE TABLE - NOT NULL Constraint
+  Input:    "CREATE TABLE t (id INT PRIMARY KEY NOT NULL, name STRING NOT NULL)"
+  Expected: Columns id and name have not_null = true
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.03: INSERT - Full
+  Input:    "INSERT INTO users (id, name, age) VALUES (1, 'Alice', 30)"
+  Expected: InsertStmt {
+              table: "users",
+              columns: ["id","name","age"],
+              values: [[Literal(1), Literal("Alice"), Literal(30)]]
+            }
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.04: INSERT - Multiple Rows
+  Input:    "INSERT INTO t (a,b) VALUES (1,2), (3,4), (5,6)"
+  Expected: InsertStmt with 3 value tuples
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.05: SELECT - All Columns
+  Input:    "SELECT * FROM users"
+  Expected: SelectStmt { columns: [Star], table: "users", ... }
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.06: SELECT - Specific Columns
+  Input:    "SELECT id, name FROM users"
+  Expected: SelectStmt { columns: ["id","name"], table: "users", ... }
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.07: SELECT with WHERE
+  Input:    "SELECT * FROM users WHERE age > 25"
+  Expected: SelectStmt {
+              where_clause: Comparison {
+                left: Column("age"),
+                op: GreaterThan,
+                right: Literal(25)
+              }
+            }
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.08: SELECT with Complex WHERE (AND)
+  Input:    "SELECT * FROM users WHERE age > 25 AND name = 'Alice'"
+  Expected: where_clause: And(Comparison(age>25), Comparison(name='Alice'))
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.09: SELECT with Complex WHERE (OR + AND)
+  Input:    "SELECT * FROM t WHERE (a=1 OR b=2) AND c=3"
+  Expected: And(Or(a=1, b=2), c=3)
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.10: SELECT with NOT
+  Input:    "SELECT * FROM t WHERE NOT active"
+  Expected: where_clause: Not(Comparison(active = true))
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.11: SELECT with ORDER BY
+  Input:    "SELECT * FROM users ORDER BY age DESC, name ASC"
+  Expected: order_by: [{col:"age",dir:DESC}, {col:"name",dir:ASC}]
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.12: SELECT with LIMIT
+  Input:    "SELECT * FROM users LIMIT 10"
+  Expected: limit: Some(10)
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.13: SELECT with LIMIT and OFFSET
+  Input:    "SELECT * FROM users LIMIT 10 OFFSET 20"
+  Expected: limit: Some(10), offset: Some(20)
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.14: UPDATE - Simple
+  Input:    "UPDATE users SET age = 31 WHERE id = 1"
+  Expected: UpdateStmt {
+              table: "users",
+              assignments: [{col:"age", value:Literal(31)}],
+              where_clause: Comparison(id=1)
+            }
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.15: UPDATE - Multiple Columns
+  Input:    "UPDATE users SET name='Bob', age=25 WHERE id=1"
+  Expected: 2 assignments parsed
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.16: UPDATE - No WHERE (Full Table)
+  Input:    "UPDATE users SET active = false"
+  Expected: where_clause: None (affects all rows)
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.17: DELETE - With WHERE
+  Input:    "DELETE FROM users WHERE age < 18"
+  Expected: DeleteStmt {
+              table: "users",
+              where_clause: Comparison(age < 18)
+            }
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.18: DELETE - No WHERE
+  Input:    "DELETE FROM users"
+  Expected: where_clause: None
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.19: Invalid Syntax - Missing FROM
+  Input:    "SELECT * users"
+  Expected: ParseError: Expected 'FROM' keyword
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.20: Invalid Syntax - Missing Parenthesis
+  Input:    "CREATE TABLE users (id INT, name STRING"
+  Expected: ParseError: Expected closing parenthesis
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.21: Invalid Syntax - Empty Statement
+  Input:    ";"
+  Expected: ParseError or Empty statement warning
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.22: Arithmetic Expression in WHERE
+  Input:    "SELECT * FROM t WHERE price * quantity > 100"
+  Expected: where_clause: Comparison(
+              left: BinaryOp(Star, Column("price"), Column("quantity")),
+              op: GreaterThan,
+              right: Literal(100)
+            )
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.23: SELECT with Arithmetic in Columns
+  Input:    "SELECT id, price * 1.1 AS new_price FROM products"
+  Expected: columns: [Column("id"),
+              AliasedExpr(BinaryOp(Mul, price, 1.1), "new_price")]
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.24: Nested Parentheses in Expression
+  Input:    "SELECT * FROM t WHERE (a + b) * (c - d) = 10"
+  Expected: Correctly parsed nested expression tree
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.25: LIKE Operator
+  Input:    "SELECT * FROM users WHERE name LIKE 'A%'"
+  Expected: Comparison(name, Like, "A%")
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.26: IN Operator
+  Input:    "SELECT * FROM users WHERE age IN (20, 25, 30)"
+  Expected: Comparison(age, In, [20, 25, 30])
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.27: BETWEEN Operator
+  Input:    "SELECT * FROM users WHERE age BETWEEN 18 AND 35"
+  Expected: Comparison(age, Between, [18, 35])
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.28: IS NULL
+  Input:    "SELECT * FROM users WHERE email IS NULL"
+  Expected: Comparison(email, IsNull, Null)
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.29: IS NOT NULL
+  Input:    "SELECT * FROM users WHERE email IS NOT NULL"
+  Expected: Comparison(email, IsNotNull, Null)
+  Status:   PASS / FAIL
+
+TEST CASE L1.2.30: Deeply Nested AND/OR (5 levels)
+  Input:    "SELECT * FROM t WHERE ((a=1 AND b=2) OR (c=3 AND d=4))
+             AND ((e=5 OR f=6) AND (g=7 OR h=8))"
+  Expected: Correctly nested condition tree
+  Status:   PASS / FAIL
+TEST CASE L1.3.01: Insert Single Key
+  Action:   Insert (key=10, value=page_id=5)
+  Expected: Root leaf contains 1 entry
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.02: Insert Multiple Keys (No Split)
+  Action:   Insert keys 10, 20, 30, 40, 50 (order=5, max 4 entries/leaf)
+  Expected: All 5 keys in single leaf until split threshold
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.03: Leaf Node Split
+  Action:   Insert 6 keys into order=5 tree (leaf max=4)
+  Expected: Leaf splits into 2 leaves, parent created
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.04: Internal Node Split
+  Action:   Insert enough keys to cause 2+ leaf splits and 1 internal split
+  Expected: Internal node splits, height increases by 1
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.05: Search Existing Key
+  Action:   Insert (10, val), then search(10)
+  Expected: Returns correct value/page_id
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.06: Search Non-Existent Key
+  Action:   Search(999) on tree with keys 1-100
+  Expected: Returns None / NotFound
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.07: Search After Split
+  Action:   Insert 20 keys, then search for each
+  Expected: All 20 keys found correctly after splits
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.08: Delete - Leaf Entry
+  Action:   Insert 5 keys, delete middle key
+  Expected: Key removed, tree still balanced
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.09: Delete - Causing Underflow (Merge)
+  Action:   Fill a leaf to minimum, delete 1 key
+  Expected: Leaf underflow triggers merge/redistribute with sibling
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.10: Delete - Redistribute from Sibling
+  Action:   Create tree with 2 leaves, delete 1 key from one leaf
+  Expected: Keys redistributed from sibling leaf (not merged)
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.11: Duplicate Key Insert
+  Action:   Insert (10, val1), then insert (10, val2)
+  Expected: Version chain updated OR error (depending on design)
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.12: Range Scan
+  Action:   Insert keys 1-100, scan range [30, 50]
+  Expected: Returns keys 30,31,...,50 in order
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.13: Full Table Scan (All Keys)
+  Action:   Insert 1000 keys, scan all
+  Expected: All 1000 keys returned in sorted order
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.14: Height Consistency
+  Action:   Insert 10,000 keys randomly
+  Expected: Tree height is O(log_n), all leaf nodes at same depth
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.15: Minimum Key (Leftmost)
+  Action:   Insert 50 keys, search min
+  Expected: Returns first key correctly
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.16: Maximum Key (Rightmost)
+  Action:   Insert 5
+================================================================================
+              CHRONODB TEST CASE SUITE — CONTINUED (from L1.3.16)
+================================================================================
+
+TEST CASE L1.3.16: Maximum Key (Rightmost)
+  Action:   Insert 50 keys, search max
+  Expected: Returns last key correctly
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.17: Insert Keys in Descending Order
+  Action:   Insert 500, 499, 498, ..., 1
+  Expected: Tree remains balanced, all keys searchable
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.18: Insert Keys in Ascending Order (Worst Case)
+  Action:   Insert 1, 2, 3, ..., 500
+  Expected: Tree does NOT degenerate into linked list; proper splits occur
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.19: Insert Random Order
+  Action:   Insert 10,000 keys in random order
+  Expected: Tree balanced, all keys searchable, height ~3-4
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.20: Delete All Keys
+  Action:   Insert 100 keys, delete all 100
+  Expected: Tree reduces to empty root, no memory leaks
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.21: Delete Non-Existent Key
+  Action:   Delete key 999 on tree with keys 1-100
+  Expected: Returns NotFound error, tree unchanged
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.22: Update Existing Key Value
+  Action:   Insert (10, val1), then update (10, val2)
+  Expected: Search(10) returns val2
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.23: Point Query Performance (1M Keys)
+  Action:   Insert 1M keys, time 10,000 random point queries
+  Expected: Average query time < 0.1ms (B+ tree guarantee)
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.24: Leaf Node Linked List Integrity
+  Action:   Insert 1000 keys, traverse leaf linked list
+  Expected: All keys in order via linked list (not just tree traversal)
+  Status:   PASS / FAIL
+
+TEST CASE L1.3.25: Page Serialization / Deserialization
+  Action:   Serialize B+ tree node to bytes, deserialize back
+  Expected: Node reconstructed identically (all keys, values, children ptrs)
+  Status:   PASS / FAIL
+
+--------------------------------------------------------------------------------
+1.4 Buffer Pool Manager Tests
+--------------------------------------------------------------------------------
+
+TEST CASE L1.4.01: Read Page from Disk into Buffer Pool
+  Action:   Request page_id=3, buffer pool size=10
+  Expected: Page loaded from disk into buffer pool, pin count=1
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.02: Cache Hit (Page Already in Pool)
+  Action:   Request page_id=3 twice
+  Expected: Second request is cache hit, no disk I/O, pin count=2
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.03: LRU Eviction (Pool Full)
+  Action:   Pool size=3, access pages 1,2,3, then page 4
+  Expected: Page 1 (least recently used) evicted, page 4 loaded
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.04: Dirty Page Eviction (Write-Back)
+  Action:   Modify page 2, evict page 2 (dirty=true)
+  Expected: Page 2 written to disk BEFORE eviction
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.05: Pinned Page Cannot Be Evicted
+  Action:   Pin page 1 (pin_count=1), trigger eviction of page 1
+  Expected: Page 1 NOT evicted (pinned), evict page 2 instead
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.06: Unpin Page
+  Action:   Pin page 1 (pin=1), unpin page 1 (pin=0)
+  Expected: pin_count decreases to 0, page is now evictable
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.07: Unpin Non-Existent Page
+  Action:   Unpin page_id=99 (not in pool)
+  Expected: Error: Page not found in buffer pool
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.08: Buffer Pool Statistics
+  Action:   Access 100 pages (50 hits, 50 misses)
+  Expected: hit_rate = 0.50, total_reads=50, total_writes=0
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.09: Flush All Dirty Pages
+  Action:   Modify 5 pages, call flush_all()
+  Expected: All 5 dirty pages written to disk, dirty flags cleared
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.10: New Page Allocation
+  Action:   Call new_page()
+  Expected: Returns fresh zeroed page with unique page_id, pin_count=1
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.11: Page Deletion
+  Action:   Delete page_id=5 from buffer pool and disk
+  Expected: Page removed from pool, disk space marked free
+  Status:   PASS / FAIL
+
+TEST CASE L1.4.12: LRU-K (Optional Advanced)
+  Action:   Access pages in pattern A,B,A,C,D,A with LRU-K (K=2)
+  Expected: Eviction considers last K accesses (not just 1)
+  Status:   PASS / FAIL
+
+--------------------------------------------------------------------------------
+1.5 Write-Ahead Log (WAL) Tests
+--------------------------------------------------------------------------------
+
+TEST CASE L1.5.01: Write Single Log Record
+  Action:   BEGIN, INSERT row, COMMIT
+  Expected: WAL contains: [BEGIN(txid=1)], [INSERT(row)], [COMMIT(txid=1)]
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.02: Write Multiple Log Records
+  Action:   BEGIN, INSERT, UPDATE, DELETE, COMMIT
+  Expected: 4 data records + 2 control records in WAL
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.03: LSN Monotonically Increases
+  Action:   Write 10 log records
+  Expected: LSN values are strictly increasing (1, 2, 3, ...)
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.04: WAL Record Serialization
+  Action:   Serialize log record, deserialize
+  Expected: All fields (txid, LSN, operation, old_value, new_value) preserved
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.05: WAL Flush on Commit (Group Commit)
+  Action:   COMMIT transaction
+  Expected: WAL flushed to disk before COMMIT returns success
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.06: REDO Operation (Update)
+  Action:   Apply redo record for UPDATE (old=5, new=10)
+  Expected: Row value changed from 5 to 10
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.07: UNDO Operation (Rollback)
+  Action:   Apply undo record for UPDATE (old=5, new=10)
+  Expected: Row value reverted from 10 to 5
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.08: REDO for INSERT
+  Action:   Apply redo record for INSERT
+  Expected: Row inserted into table
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.09: UNDO for INSERT (Delete the Inserted Row)
+  Action:   Apply undo record for INSERT
+  Expected: Row removed from table
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.10: REDO for DELETE
+  Action:   Apply redo record for DELETE
+  Expected: Row removed from table
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.11: UNDO for DELETE (Restore Deleted Row)
+  Action:   Apply undo record for DELETE
+  Expected: Row restored to table with original values
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.12: WAL Checkpoint Creation
+  Action:   Run 100 transactions, trigger checkpoint at LSN=200
+  Expected: Checkpoint record saved with LSN=200, dirty page table flushed
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.13: Checkpoint Truncation
+  Action:   Create checkpoint at LSN=200
+  Expected: WAL records before LSN=200 can be safely truncated
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.14: WAL Reader - Sequential
+  Action:   Write 50 records, read WAL from beginning
+  Expected: All 50 records returned in order
+  Status:   PASS / FAIL
+
+TEST CASE L1.5.15: WAL Reader - From Specific LSN
+  Action:   Write 50 records, read from LSN=30
+  Expected: Records 30-50 returned (21 records)
+  Status:   PASS / FAIL
+
+--------------------------------------------------------------------------------
+1.6 Version Chain Manager Tests
+--------------------------------------------------------------------------------
+
+TEST CASE L1.6.01: Create Initial Version
+  Action:   INSERT row (id=1, val='A')
+  Expected: Version chain: [(start_ts=1, end_ts=MAX, val='A')]
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.02: Create Second Version (Update)
+  Action:   UPDATE row (id=1) SET val='B' at ts=2
+  Expected: Version chain:
+              [(ts=1, ts=2, val='A'), (ts=2, ts=MAX, val='B')]
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.03: Create Third Version (Update Again)
+  Action:   UPDATE row (id=1) SET val='C' at ts=3
+  Expected: Version chain:
+              [(ts=1,ts=2,'A'), (ts=2,ts=3,'B'), (ts=3,ts=MAX,'C')]
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.04: Read Latest Version
+  Action:   Read at ts=4 (current)
+  Expected: Returns val='C' (latest version)
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.05: Read Historical Version (Time-Travel)
+  Action:   Read at ts=2 (AS OF)
+  Expected: Returns val='A' (version active at ts=2)
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.06: Read Before First Version
+  Action:   Read at ts=0 (before row was inserted)
+  Expected: Returns None / Row not found
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.07: Soft Delete
+  Action:   DELETE row at ts=4
+  Expected: Current version (ts=3, ts=MAX) updated to (ts=3, ts=4)
+              No new version created, but end_ts closes
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.08: Read After Soft Delete
+  Action:   Read at ts=5 (after delete at ts=4)
+  Expected: Returns None (no active version at ts=5)
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.09: Read Before Soft Delete (Time-Travel)
+  Action:   Read at ts=3 (before delete at ts=4)
+  Expected: Returns val='C' (version still active at ts=3)
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.10: Garbage Collection (GC Old Versions)
+  Action:   Set retention window = 100 ticks, GC at ts=200
+  Expected: Versions with end_ts < 100 are removed
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.11: GC Does Not Remove Active Versions
+  Action:   GC at ts=200 with retention=100
+  Expected: Current version (end_ts=MAX) is NOT removed
+  Status:   PASS / FAIL
+
+TEST CASE L1.6.12: Version Chain Traversal (Full History)
+  Action:   Show full version chain for id=1
+  Expected: Returns all versions in chronological order:
+              ts=1:'A', ts=2:'B', ts=3:'C', ts=4:DELETED
+  Status:   PASS / FAIL
+
+--------------------------------------------------------------------------------
+1.7 Transaction Manager Tests
+--------------------------------------------------------------------------------
+
+TEST CASE L1.7.01: Begin Transaction
+  Action:   BEGIN
+  Expected: Transaction created with unique txid, read_ts=next_ts,
+              write_ts=UNASSIGNED
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.02: Commit Transaction
+  Action:   BEGIN, INSERT, COMMIT
+  Expected: Transaction committed, write_ts assigned, version visible
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.03: Rollback Transaction
+  Action:   BEGIN, INSERT, UPDATE, ROLLBACK
+  Expected: All changes undone, no versions visible
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.04: Auto-Commit (No Explicit BEGIN)
+  Action:   INSERT (no BEGIN)
+  Expected: Implicit single-statement transaction, auto-committed
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.05: Timestamp Generation Monotonic
+  Action:   Create 10 transactions sequentially
+  Expected: Timestamps: 1, 2, 3, ..., 10 (strictly increasing)
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.06: Write-Write Conflict Detection
+  Action:   TX1 writes row A, TX2 writes row A (before TX1 commits)
+  Expected: TX2 gets WriteConflictError or waits
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.07: Read-Write No Conflict (Snapshot Isolation)
+  Action:   TX1 reads row A, TX2 writes row A
+  Expected: TX1 reads old value (snapshot), TX2 writes new value,
+              no conflict detected
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.08: Concurrent Transactions Isolation
+  Action:   TX1 reads row at ts=1, TX2 writes row at ts=2
+  Expected: TX1 sees original value (isolated from TX2's write)
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.09: Transaction Timeout
+  Action:   BEGIN, write, never COMMIT (simulated timeout)
+  Expected: After timeout period, auto-rollback and cleanup
+  Status:   PASS / FAIL
+
+TEST CASE L1.7.10: Nested Transaction Detection
+  Action:   BEGIN, BEGIN
+  Expected: Error: Nested transactions not supported (or savepoint)
+  Status:   PASS / FAIL
+
+================================================================================
+2. CATEGORY L2 — INTEGRATION TESTS (Multi-Module)
+================================================================================
+
+TEST CASE L2.01: Full CRUD Lifecycle
+  Action:
+    1. CREATE TABLE users (id INT PRIMARY KEY, name STRING, age INT)
+    2. INSERT INTO users (id,name,age) VALUES (1,'Alice',30)
+    3. SELECT * FROM users
+    4. UPDATE users SET age=31 WHERE id=1
+    5. SELECT * FROM users
+    6. DELETE FROM users WHERE id=1
+    7. SELECT * FROM users
+  Expected:
+    Step 3: Returns 1 row (1, 'Alice', 30)
+    Step 5: Returns 1 row (1, 'Alice', 31)
+    Step 7: Returns 0 rows
+  Status:   PASS / FAIL
+
+TEST CASE L2.02: CREATE TABLE + Index + Query with Index
+  Action:
+    1. CREATE TABLE products (id INT PRIMARY KEY, name STRING,
+       price FLOAT)
+    2. CREATE INDEX idx_price ON products(price)
+    3. INSERT 1000 rows
+    4. SELECT * FROM products WHERE price > 50.0
+  Expected: Query uses index (verify via EXPLAIN), returns correct rows
+  Status:   PASS / FAIL
+
+TEST CASE L2.03: Multi-Table Storage
+  Action:
+    1. CREATE TABLE users (...)
+    2. CREATE TABLE orders (...)
+    3. INSERT into both tables
+    4. SELECT from each
+  Expected: Both tables stored independently, data correctly separated
+  Status:   PASS / FAIL
+
+TEST CASE L2.04: Large Batch Insert + Query
+  Action:
+    1. CREATE TABLE metrics (id INT PRIMARY KEY, value FLOAT,
+       ts TIMESTAMP)
+    2. INSERT 10,000 rows
+    3. SELECT COUNT(*) FROM metrics
+    4. SELECT * FROM metrics WHERE id BETWEEN 5000 AND 5010
+  Expected: count=10000, range query returns 11 rows in order
+  Status:   PASS / FAIL
+
+TEST CASE L2.05: Transaction + WAL + Storage (End-to-End)
+  Action:
+    1. BEGIN
+    2. INSERT row A
+    3. INSERT row B
+    4. COMMIT
+    5. Verify WAL contains all records
+    6. Verify data.db contains both rows
+  Expected: All 3 systems consistent (transaction committed, WAL has
+              records, storage has data)
+  Status:   PASS / FAIL
+
+TEST CASE L2.06: Rollback + WAL + Storage
+  Action:
+    1. BEGIN
+    2. INSERT row A
+    3. UPDATE row B
+    4. ROLLBACK
+    5. Verify WAL
+================================================================================
+          CHRONODB TEST CASE SUITE — CONTINUED (from L2.06)
+================================================================================
+
+TEST CASE L2.06: Rollback + WAL + Storage
+  Action:
+    1. BEGIN
+    2. INSERT row A
+    3. UPDATE row B
+    4. ROLLBACK
+    5. Verify WAL contains UNDO records
+    6. Verify data.db does NOT contain row A
+    7. Verify row B has original values
+  Expected: All changes fully rolled back across WAL and storage
+  Status:   PASS / FAIL
+
+TEST CASE L2.07: Multiple Transactions Sequential
+  Action:
+    1. BEGIN; INSERT (1,'A'); COMMIT
+    2. BEGIN; INSERT (2,'B'); COMMIT
+    3. BEGIN; INSERT (3,'C'); COMMIT
+    4. SELECT * FROM t
+  Expected: All 3 rows visible, each in separate committed transaction
+  Status:   PASS / FAIL
+
+TEST CASE L2.08: DDL + DML Mixing
+  Action:
+    1. CREATE TABLE t (id INT PRIMARY KEY, val STRING)
+    2. INSERT INTO t VALUES (1,'x')
+    3. CREATE TABLE t2 (id INT PRIMARY KEY, val STRING)
+    4. INSERT INTO t2 VALUES (1,'y')
+    5. SELECT * FROM t
+    6. SELECT * FROM t2
+  Expected: Each table has its own data, no cross-contamination
+  Status:   PASS / FAIL
+
+TEST CASE L2.09: CREATE TABLE Duplicate Name
+  Action:
+    1. CREATE TABLE users (id INT PRIMARY KEY)
+    2. CREATE TABLE users (id INT PRIMARY KEY)
+  Expected: Step 2 returns Error: Table 'users' already exists
+  Status:   PASS / FAIL
+
+TEST CASE L2.10: INSERT into Non-Existent Table
+  Action:   INSERT INTO ghost (id) VALUES (1)
+  Expected: Error: Table 'ghost' does not exist
+  Status:   PASS / FAIL
+
+TEST CASE L2.11: SELECT from Non-Existent Table
+  Action:   SELECT * FROM ghost
+  Expected: Error: Table 'ghost' does not exist
+  Status:   PASS / FAIL
+
+TEST CASE L2.12: INSERT Column Count Mismatch
+  Action:   INSERT INTO t (a, b) VALUES (1)
+  Expected: Error: Expected 2 values, got 1
+  Status:   PASS / FAIL
+
+TEST CASE L2.13: INSERT Wrong Data Type
+  Action:   INSERT INTO t (id INT, age INT) VALUES ('hello', 25)
+  Expected: Error: Cannot insert STRING into column 'id' of type INT
+  Status:   PASS / FAIL
+
+TEST CASE L2.14: UPDATE Non-Existent Row
+  Action:   UPDATE users SET age=99 WHERE id=99999
+  Expected: 0 rows affected (no error)
+  Status:   PASS / FAIL
+
+TEST CASE L2.15: DELETE Non-Existent Row
+  Action:   DELETE FROM users WHERE id=99999
+  Expected: 0 rows affected (no error)
+  Status:   PASS / FAIL
+
+TEST CASE L2.16: INSERT Primary Key Duplicate
+  Action:
+    1. INSERT INTO t (id, val) VALUES (1, 'x')
+    2. INSERT INTO t (id, val) VALUES (1, 'y')
+  Expected: Step 2 returns Error: Duplicate primary key id=1
+  Status:   PASS / FAIL
+
+TEST CASE L2.17: NOT NULL Violation
+  Action:   INSERT INTO t (id, name) VALUES (1, NULL)
+  Expected: Error: Column 'name' cannot be NULL
+  Status:   PASS / FAIL
+
+TEST CASE L2.18: SELECT with Index + WHERE + ORDER BY + LIMIT
+  Action:   SELECT * FROM products WHERE price > 10 ORDER BY price
+             DESC LIMIT 5
+  Expected: 5 most expensive products above price 10, in descending order
+  Status:   PASS / FAIL
+
+TEST CASE L2.19: Large Table Scan (100K rows)
+  Action:
+    1. INSERT 100,000 rows
+    2. SELECT * FROM t WHERE id > 50000
+  Expected: Returns 50,000 rows (id 50001-100000)
+  Status:   PASS / FAIL
+
+TEST CASE L2.20: Full Pipeline: Parse -> Plan -> Execute -> Storage -> WAL
+  Action:   INSERT INTO t (id, val) VALUES (1, 'hello')
+  Expected:
+    1. Tokenizer produces correct tokens
+    2. Parser produces InsertStmt AST
+    3. Planner produces InsertPlan
+    4. Executor calls StorageEngine.insert()
+    5. WAL records the INSERT
+    6. Buffer pool writes dirty page to disk
+    7. SELECT confirms row exists
+  Status:   PASS / FAIL
+
+================================================================================
+3. CATEGORY L3 — EDGE CASES & BOUNDARY TESTS
+================================================================================
+
+TEST CASE L3.01: Maximum Integer Value
+  Action:   INSERT INTO t (id) VALUES (2147483647)
+  Expected: Stored and retrieved correctly (INT_MAX)
+  Status:   PASS / FAIL
+
+TEST CASE L3.02: Minimum Integer Value
+  Action:   INSERT INTO t (id) VALUES (-2147483648)
+  Expected: Stored and retrieved correctly (INT_MIN)
+  Status:   PASS / FAIL
+
+TEST CASE L3.03: Float Precision
+  Action:   INSERT INTO t (price) VALUES (3.14159265358979)
+  Expected: Retrieved value matches within epsilon (1e-12)
+  Status:   PASS / FAIL
+
+TEST CASE L3.04: Empty String
+  Action:   INSERT INTO t (name) VALUES ('')
+  Expected: Stored and retrieved as empty string (not NULL)
+  Status:   PASS / FAIL
+
+TEST CASE L3.05: NULL Value
+  Action:   INSERT INTO t (email) VALUES (NULL)
+  Expected: Stored as NULL, retrieved as NULL
+  Status:   PASS / FAIL
+
+TEST CASE L3.06: Very Long String (1MB)
+  Action:   INSERT INTO t (data) VALUES ('A' * 1000000)
+  Expected: Stored and retrieved correctly (or proper error if over limit)
+  Status:   PASS / FAIL
+
+TEST CASE L3.07: SQL Injection Attempt (String)
+  Action:   SELECT * FROM users WHERE name = '' OR 1=1 --'
+  Expected: Treated as literal string, does NOT return all rows
+  Status:   PASS / FAIL
+
+TEST CASE L3.08: Special Characters in String
+  Action:   INSERT INTO t (val) VALUES ('~!@#$%^&*()_+{}|:"<>?')
+  Expected: Stored and retrieved correctly
+  Status:   PASS / FAIL
+
+TEST CASE L3.09: Unicode Characters
+  Action:   INSERT INTO t (name) VALUES ('日本語テスト émojis 🎉')
+  Expected: Stored and retrieved correctly (UTF-8 encoding)
+  Status:   PASS / FAIL
+
+TEST CASE L3.10: Timestamp at Epoch (1970-01-01 00:00:00)
+  Action:   INSERT INTO t (ts) VALUES ('1970-01-01 00:00:00')
+  Expected: Stored and retrieved correctly
+  Status:   PASS / FAIL
+
+TEST CASE L3.11: Timestamp Far Future (9999-12-31 23:59:59)
+  Action:   INSERT INTO t (ts) VALUES ('9999-12-31 23:59:59')
+  Expected: Stored and retrieved correctly
+  Status:   PASS / FAIL
+
+TEST CASE L3.12: Invalid Timestamp Format
+  Action:   SELECT * FROM t AS OF 'not-a-date'
+  Expected: Error: Invalid timestamp format
+  Status:   PASS / FAIL
+
+TEST CASE L3.13: Single Column Table
+  Action:   CREATE TABLE t (id INT PRIMARY KEY)
+  Expected: Table created, INSERT/SELECT work with single column
+  Status:   PASS / FAIL
+
+TEST CASE L3.14: Many Columns Table (50 columns)
+  Action:   CREATE TABLE wide (c1 INT, c2 INT, ..., c50 INT)
+  Expected: Table created, INSERT/SELECT work with 50 columns
+  Status:   PASS / FAIL
+
+TEST CASE L3.15: Zero Rows Table
+  Action:   CREATE TABLE empty (id INT PRIMARY KEY); SELECT * FROM empty
+  Expected: Returns 0 rows (no error)
+  Status:   PASS / FAIL
+
+TEST CASE L3.16: WHERE with Always False Condition
+  Action:   SELECT * FROM t WHERE 1 = 2
+  Expected: Returns 0 rows
+  Status:   PASS / FAIL
+
+TEST CASE L3.17: WHERE with Always True Condition
+  Action:   SELECT * FROM t WHERE 1 = 1
+  Expected: Returns all rows
+  Status:   PASS / FAIL
+
+TEST CASE L3.18: LIMIT 0
+  Action:   SELECT * FROM t LIMIT 0
+  Expected: Returns 0 rows
+  Status:   PASS / FAIL
+
+TEST CASE L3.19: LIMIT > Row Count
+  Action:   SELECT * FROM t LIMIT 1000  (table has 5 rows)
+  Expected: Returns 5 rows (no error)
+  Status:   PASS / FAIL
+
+TEST CASE L3.20: Negative LIMIT
+  Action:   SELECT * FROM t LIMIT -1
+  Expected: Error: LIMIT must be non-negative
+  Status:   PASS / FAIL
+
+TEST CASE L3.21: Trailing Semicolons (Multiple)
+  Action:   "SELECT * FROM t;;;"
+  Expected: Executed normally or trailing semicolons ignored
+  Status:   PASS / FAIL
+
+TEST CASE L3.22: Very Long Query (10KB SQL)
+  Action:   INSERT with 500 columns in single statement
+  Expected: Parsed and executed correctly (or proper error)
+  Status:   PASS / FAIL
+
+TEST CASE L3.23: Comment Handling (--)
+  Action:   "SELECT * FROM t -- this is a comment"
+  Expected: Comment stripped, query executes normally
+  Status:   PASS / FAIL
+
+TEST CASE L3.24: Comment Handling (/* */)
+  Action:   "SELECT /* comment */ * FROM t /* another */"
+  Expected: Both comments stripped, query executes normally
+  Status:   PASS / FAIL
+
+TEST CASE L3.25: Column Reference to Non-Existent Column
+  Action:   SELECT ghost_col FROM t
+  Expected: Error: Column 'ghost_col' does not exist in table 't'
+  Status:   PASS / FAIL
+
+TEST CASE L3.26: Ambiguous Column Name (Self-Join)
+  Action:   SELECT id FROM t WHERE id > 5
+  Expected: Works if column is unambiguous; error if truly ambiguous
+  Status:   PASS / FAIL
+
+TEST CASE L3.27: Division by Zero
+  Action:   SELECT * FROM t WHERE x / 0 = 5
+  Expected: Error: Division by zero (or NULL result)
+  Status:   PASS / FAIL
+
+TEST CASE L3.28: Integer Overflow in Arithmetic
+  Action:   SELECT * FROM t WHERE x + 2147483647 = 0
+  Expected: Error: Integer overflow detected (or promoted to BIGINT)
+  Status:   PASS / FAIL
+
+TEST CASE L3.29: LIKE Pattern Edge Cases
+  Action:   name LIKE '%' (matches all), name LIKE '' (matches empty),
+            name LIKE '%%' (matches all), name LIKE '_' (matches 1 char)
+  Expected: Each pattern behaves correctly
+  Status:   PASS / FAIL
+
+TEST CASE L3.30: Deeply Nested WHERE (10 levels of parens)
+  Action:   WHERE (((((((((a=1)))))))))
+  Expected: Parses correctly to Comparison(a=1)
+  Status:   PASS / FAIL
+
+================================================================================
+4. CATEGORY L4 — CONCURRENCY TESTS (MVCC)
+================================================================================
+
+TEST CASE L4.01: Two Transactions Read Same Row (No Conflict)
+  Setup:
+    - INSERT row (id=1, val='original')
+  Action:
+    - TX1: BEGIN; SELECT * FROM t WHERE id=1
+    - TX2: BEGIN; SELECT * FROM t WHERE id=1
+  Expected: Both TX1 and TX2 read 'original' (read-read no conflict)
+  Status:   PASS / FAIL
+
+TEST CASE L4.02: Read-Write Isolation (Snapshot)
+  Setup:
+    - INSERT row (id=1, val='original')
+  Action:
+    - TX1: BEGIN; SELECT val FROM t WHERE id=1  (reads 'original')
+    - TX2: BEGIN; UPDATE t SET val='modified' WHERE id=1; COMMIT
+    - TX1: SELECT val FROM t WHERE id=1  (should still read 'original')
+    - TX1: COMMIT
+  Expected:
+    - TX1 reads 'original' both times (snapshot isolation)
+    - After TX1 commits, future reads see 'modified'
+  Status:   PASS / FAIL
+
+TEST CASE L4.03: Write-Write Conflict
+  Setup:
+    - INSERT row (id=1, val='A')
+  Action:
+    - TX1: BEGIN; UPDATE t SET val='X' WHERE id=1
+    - TX2: BEGIN; UPDATE t SET val='Y' WHERE id=1  (before TX1 commits)
+    - TX1: COMMIT
+    - TX2: COMMIT
+  Expected:
+    - TX2 receives WriteConflictError OR TX1 receives it
+    - Only one update wins, the other rolls back
+  Status:   PASS / FAIL
+
+TEST CASE L4.04: Dirty Read Prevention
+  Setup:
+    - INSERT row (id=1, val='A')
+  Action:
+    - TX1: BEGIN; UPDATE t SET val='B' WHERE id=1  (NOT committed)
+    - TX2: BEGIN; SELECT val FROM t WHERE id=1
+    - TX2: COMMIT
+  Expected: TX2 reads 'A' (not 'B'), because TX1 hasn't committed
+  Status:   PASS / FAIL
+
+TEST CASE L4.05: Non-Repeatable Read Prevention
+  Setup:
+    - INSERT row (id=1, val='A')
+  Action:
+    - TX1: BEGIN; SELECT val FROM t WHERE id=1  (reads 'A')
+    - TX2: BEGIN; UPDATE t SET val='B' WHERE id=1; COMMIT
+    - TX1: SELECT val FROM t WHERE id=1  (should still read 'A')
+    - TX1: COMMIT
+  Expected: TX1 reads 'A' both times (no non-repeatable read)
+  Status:   PASS / FAIL
+
+TEST CASE L4.06: Phantom Read Prevention
+  Setup:
+    - INSERT rows id=1,2,3
+  Action:
+    - TX1: BEGIN; SELECT * FROM t WHERE id > 1  (returns id=2,3)
+    - TX2: BEGIN; INSERT INTO t (id,val) VALUES (4,'D'); COMMIT
+    - TX1: SELECT * FROM t WHERE id > 1  (should still return id=2,3)
+    - TX1: COMMIT
+  Expected: TX1 sees 2 rows both times (no phantom rows)
+  Status:   PASS / FAIL
+
+TEST CASE L4.07: Concurrent Inserts (Different Rows)
+  Action:
+    - TX1: BEGIN; INSERT (id=1, val='A'); COMMIT
+    - TX2: BEGIN; INSERT (id=2, val='B'); COMMIT
+    (executed concurrently)
+  Expected: Both rows inserted successfully, no conflict
+  Status:   PASS / FAIL
+
+TEST CASE L4.08: Concurrent Inserts (Same Primary Key)
+  Action:
+    - TX1: BEGIN; INSERT (id=1, val='A')
+    - TX2: BEGIN; INSERT (id=1, val='B')  (before TX1 commits)
+  Expected: One succeeds, other gets WriteConflictError or
+            DuplicateKeyError
+  Status:   PASS / FAIL
+
+TEST CASE L4.09: Deadlock Prevention (Ordered Locking)
+  Setup:
+    - INSERT rows id=1,2
+  Action:
+    - TX1: BEGIN; UPDATE t SET val='X' WHERE id=1;
+              UPDATE t SET val='X' WHERE id=2
+    - TX2: BEGIN; UPDATE t SET val='Y' WHERE id=2;
+              UPDATE t SET val='Y' WHERE id=1
+  Expected: No deadlock (MVCC avoids locks); one TX gets conflict
+            and aborts
+  Status:   PASS / FAIL
+
+TEST CASE L4.10: Long Transaction + Short Transactions
+  Action:
+    - TX_LONG: BEGIN; SELECT (snapshot at ts=1)
+    - TX1: BEGIN; INSERT (id=1); COMMIT (ts=2)
+    - TX2: BEGIN; INSERT (id=2); COMMIT (ts=3)
+    - TX3: BEGIN; INSERT (id=3); COMMIT (ts=4)
+    - TX_LONG: SELECT * FROM t  (should see 0 new rows from TX1-3)
+    - TX_LONG: COMMIT
+  Expected: TX_LONG sees consistent snapshot (0 rows from TX1-3)
+  Status:   PASS / FAIL
+
+TEST CASE L4.11: 50 Concurrent Read Transactions
+  Action:   50 transactions simultaneously read same row
+  Expected: All 50 succeed, all read same value, no contention
+  Status:   PASS / FAIL
+
+TEST CASE L4.12: 50 Concurrent Read + 1 Write Transaction
+  Action:   50 transactions read row A, 1 transaction writes row A
+  Expected: 50 reads see old value (snapshot), write commits successfully
+  Status:   PASS / FAIL
+
+TEST CASE L4

@@ -1,0 +1,457 @@
+================================================================================
+                    CHRONODB - COMPLETE PROJECT GUIDE
+         A Time-Travel Database with MVCC, Branching & Point-in-Time SQL
+                                October 2026
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+ 1. Project Overview & Vision
+ 2. Why This Project Matters
+ 3. System Architecture (Deep Dive)
+ 4. Module-by-Module Implementation Guide
+    4.1 SQL Tokenizer (Lexer)
+    4.2 SQL Parser (Recursive Descent)
+    4.3 Storage Engine - Page Manager
+    4.4 Buffer Pool Manager (LRU Cache)
+    4.5 B+ Tree Index Manager
+    4.6 Version Chain Manager (MVCC)
+    4.7 Write-Ahead Log (WAL)
+    4.8 Transaction Manager
+    4.9 Query Execution Engine (Volcano Model)
+    4.10 Time-Travel Engine
+    4.11 Branch Manager (Git-like)
+    4.12 Diff & Merge Engine
+ 5. Data Structures & Algorithms
+ 6. SQL Grammar & Parser Design
+ 7. Project File Structure
+ 8. Implementation Roadmap (Week-by-Week)
+ 9. Testing Strategy
+10. Performance Benchmarks
+11. Demo Script for Interviews
+12. Interview Talking Points
+13. Bonus Features for Extra Credit
+
+================================================================================
+1. PROJECT OVERVIEW & VISION
+================================================================================
+
+ONE-LINER:
+  ChronoDB is a lightweight relational database engine built from scratch that
+  natively supports time-travel queries (AS OF), Git-like branching
+  (CREATE BRANCH / CHECKOUT / MERGE), data diffing, and full audit trails --
+  powered by MVCC concurrency control and Write-Ahead Logging.
+
+THE ANALOGY:
+  Git                    ->  ChronoDB
+  ---------------------------------------------------------------------------
+  Repository             ->  Database
+  Branch (main, dev)     ->  Branch (main, staging, experiment)
+  Commit                 ->  Transaction (with timestamp)
+  git diff               ->  DIFF main staging
+  git merge              ->  MERGE staging INTO main
+  git checkout <branch>  ->  CHECKOUT staging
+  git log                ->  SHOW HISTORY <table>
+  Time travel to old     ->  SELECT ... AS OF 'timestamp'
+  commit
+
+WHAT MAKES IT NOT JUST A CRUD APP:
+  What People Build                    What You Build
+  ---------------------------------------------------------------------------
+  SQLite wrapper with SQLAlchemy       Database ENGINE from scratch
+  CRUD API on Postgres                 Custom SQL parser, query optimizer,
+                                       storage engine
+  Simple in-memory dict                B+ tree on disk with buffer pool
+  No concurrency                       MVCC with snapshot isolation
+  No crash recovery                    WAL with checkpoint & replay
+  Basic audit logging                  FULL VERSION CHAINS - every value ever
+                                       stored
+  No branching                         Git-like branch/merge on database state
+
+================================================================================
+2. WHY THIS PROJECT MATTERS
+================================================================================
+
+FOR SDE INTERVIEWS (Amazon, Google, Meta, etc.):
+
+  Interview Topic          How ChronoDB Demonstrates It
+  ---------------------------------------------------------------------------
+  Systems Design           Storage engine, buffer pool, disk I/O, indexing
+  Data Structures          B+ trees, version chains, hash maps, queues
+  Algorithms               SQL parsing (recursive descent), query execution
+                           (Volcano), sort-merge, three-way diff, graph
+                           algorithms (DAGs)
+  Concurrency              MVCC, snapshot isolation, deadlock-free reads
+  Persistence              WAL, crash recovery, checkpointing
+  OOP / SOLID Design       Modular engine components with clean interfaces
+  Testing                  Consistency tests, crash injection, property-based
+                           tests
+  Performance              Benchmarking, profiling, index selection
+  Trade-offs               ACID vs performance, memory vs disk, lock-free vs
+                           locked
+
+REAL-WORLD RELEVANCE:
+  Company        Why They Care
+  ---------------------------------------------------------------------------
+  Google         Spanner has time-travel. Borg has versioning.
+  Amazon         DynamoDB has TTL/versioning. Aurora has MVCC.
+  Meta           MySQL at Meta scale requires deep MVCC knowledge.
+  CockroachDB    Entire product is distributed MVCC with time-travel.
+  MongoDB        oplog + change streams = time-travel concept.
+  Any DB company You have literally built their core technology.
+
+================================================================================
+3. SYSTEM ARCHITECTURE (DEEP DIVE)
+================================================================================
+
+  +-----------------------------------------------------------------------+
+  |                       CLIENT / CLI (REPL)                             |
+  |                   (Interactive SQL Shell)                             |
+  +-------------------------------+---------------------------------------+
+                                | SQL Text
+                                v
+  +-----------------------------------------------------------------------+
+  |                       SQL PARSER MODULE                               |
+  |   +------------+   +---------------+   +-------------------------+    |
+  |   | Tokenizer  |-->|  Parser       |-->|  Abstract Syntax Tree   |    |
+  |   | (Lexer)    |   | (Recursive    |   |  (AST)                  |    |
+  |   |            |   |  Descent)     |   |                         |    |
+  |   +------------+   +---------------+   +------------+------------+    |
+  +-----------------------------------------+-----------+-----------------+
+                                                  |
+                                                  v
+  +-----------------------------------------------------------------------+
+  |                   QUERY PLANNER / OPTIMIZER                           |
+  |   +--------------+   +------------------+   +---------------------+   |
+  |   | Logical Plan |-->|  Optimizer       |-->| Physical Plan       |   |
+  |   | (AST -> Plan) |   |  (Predicate Push |   | (Operators)        |   |
+  |   |              |   |   Down, Index    |   |                     |   |
+  |   |              |   |   Selection)     |   |                     |   |
+  |   +--------------+   +------------------+   +----------+----------+   |
+  +--------------------------------------------------------+-------------+
+                                                           |
+                                                           v
+  +-----------------------------------------------------------------------+
+  |                  QUERY EXECUTION ENGINE (Volcano)                     |
+  |                                                                       |
+  |    +------+   +------+   +------+   +------+   +------+               |
+  |    |Scan  |-->|Filter|-->|Sort  |-->|Proj  |-->|Result|               |
+  |    |(B+   |   |      |   |      |   |      |   |      |               |
+  |    |Tree) |   |      |   |      |   |      |   |      |               |
+  |    +------+   +------+   +------+   +------+   +------+               |
+  |                                                                       |
+  |    Special Operators:                                                 |
+  |    +----------+  +----------+  +----------+  +----------------+       |
+  |    |Insert    |  |Update    |  |Delete    |  |TimeTravelScan  |       |
+  |    |Executor  |  |Executor  |  |Executor  |  |(AS OF filter)  |       |
+  |    +----------+  +----------+  +----------+  +----------------+       |
+  +--------------------------------------+--------------------------------+
+                                         |
+                                         v
+  +-----------------------------------------------------------------------+
+  |                  TRANSACTION MANAGER (MVCC)                           |
+  |                                                                       |
+  |   +------------------+  +------------------+  +--------------------+   |
+  |   | Transaction ID   |  | Snapshot Manager |  | Conflict           |   |
+  |   | Generator (TSO)  |  | (Read/Write      |  | Detector           |   |
+  |   |                  |  |  timestamps)     |  | (Write-Write)      |   |
+  |   +------------------+  +------------------+  +--------------------+   |
+  +--------------------------------------+--------------------------------+
+                                         |
+                                         v
+  +-----------------------------------------------------------------------+
+  |                      STORAGE ENGINE                                   |
+  |                                                                       |
+  |   +--------------------+  +------------------+  +-------------------+  |
+  |   | Buffer Pool        |  | B+ Tree Index    |  | Version Chain     |  |
+  |   | Manager (LRU)      |  | Manager          |  | Manager (MVCC)    |  |
+  |   | (Page Cache)       |  | (Primary+Second) |  | (Row Versions)    |  |
+  |   +--------------------+  +------------------+  +-------------------+  |
+  |                                                                       |
+  |   +--------------------+  +------------------+  +-------------------+  |
+  |   | Table Manager      |  | Write-Ahead Log  |  | Checkpoint        |  |
+  |   | (Schema + Catalog) |  | (WAL) Manager    |  | Manager           |  |
+  |   +--------------------+  +------------------+  +-------------------+  |
+  +--------------------------------------+--------------------------------+
+                                         |
+                                         v
+  +-----------------------------------------------------------------------+
+  |                     DISK / FILE SYSTEM                                |
+  |   +-----------+  +-----------+  +-----------+  +-----------+          |
+  |   | data.db   |  | wal.log   |  | index.db   |  | catalog   |          |
+  |   | (Pages)   |  | (Journal) |  | (B+ Trees) |  | (Schema)  |          |
+  |   +-----------+  +-----------+  +-----------+  +-----------+          |
+  +-----------------------------------------------------------------------+
+
+LAYER RESPONSIBILITIES:
+  Layer                  Responsibility            Key Concept
+  ---------------------------------------------------------------------------
+  CLI                    Accept SQL, display       REPL, formatting
+                         results
+  Parser                 SQL text -> AST           Tokenizer, Recursive
+                                                   Descent, Grammar
+  Planner                AST -> Physical Plan      Predicate Pushdown, Index
+                                                   Selection
+  Executor               Execute Plan operators    Volcano/Iterator Model
+  Transaction Manager    MVCC, snapshot isolation  Transaction IDs,
+                                                   Timestamps
+  Storage Engine         Persist data on disk      B+ Trees, Pages, Buffer
+                                                   Pool
+  WAL Manager            Crash recovery            Append-only log,
+                                                   Redo/Undo
+  Branch Manager         Git-like branching        Snapshot branching, DAG of
+                                                   branches
+
+================================================================================
+4. MODULE-BY-MODULE IMPLEMENTATION GUIDE
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 SQL TOKENIZER (LEXER)
+--------------------------------------------------------------------------------
+
+PURPOSE: Convert raw SQL text into tokens (keywords, identifiers, operators,
+literals).
+
+TOKEN TYPES:
+  enum TokenType {
+      // Keywords
+      Select, From, Where, Insert, Into, Values, Update, Set, Delete,
+      Create, Table, Branch, Checkout, Merge, Diff, As, Of, Show, History,
+      Order, By, Group, Having, Join, On, Primary, Key, Not, Null,
+      True, False, And, Or, In, Between, Like, Limit, Offset,
+
+      // Types
+      Integer, Float, String, Boolean, Timestamp,
+
+      // Operators
+      Equal, NotEqual, LessThan, GreaterThan, LessEq, GreaterEq,
+      Plus, Minus, Star, Slash, Percent, Comma, Semicolon, Dot,
+
+      // Delimiters
+      LeftParen, RightParen,
+
+      // Literals
+      NumberLiteral(f64),
+      StringLiteral(String),
+      Identifier(String),
+
+      // End
+      Eof,
+  }
+
+TOKENIZER ALGORITHM:
+  FUNCTION tokenize(sql: String) -> Vec<Token>:
+      tokens = []
+      i = 0
+      WHILE i < sql.length():
+          c = sql[i]
+
+          IF c is whitespace:
+              skip
+          ELIF c is digit:
+              read full number (integer or float)
+              emit NumberLiteral
+          ELIF c is quote (' or "):
+              read until matching quote (handle escapes)
+              emit StringLiteral
+          ELIF c is alpha or underscore:
+              read full word
+              IF word is SQL keyword (case-insensitive):
+                  emit keyword token
+              ELSE:
+                  emit Identifier
+          ELIF c is operator char:
+              read operator (handle two-char ops like !=, <=, >=)
+              emit operator token
+          ELSE:
+              emit delimiter token
+
+      emit Eof
+      RETURN tokens
+
+--------------------------------------------------------------------------------
+4.2 SQL PARSER (RECURSIVE DESCENT)
+--------------------------------------------------------------------------------
+
+PURPOSE: Convert token stream into an Abstract Syntax Tree (AST).
+
+GRAMMAR (Simplified):
+  statement      := create_table | select | insert | update | delete
+                   | create_branch | checkout | merge | diff | show_history
+
+  create_table   := "CREATE" "TABLE" identifier "(" col_def ("," col_def)* ")"
+  col_def        := identifier type ("PRIMARY" "KEY")? ("NOT" "NULL")?
+
+  select         := "SELECT" select_list "FROM" table_ref
+                    ("AS" "OF" timestamp)?
+                    ("WHERE" condition)?
+                    ("ORDER" "BY" order_list)?
+                    ("LIMIT" number)?
+
+  insert         := "INSERT" "INTO" identifier "(" col_list ")"
+                    "VALUES" value_list
+
+  update         := "UPDATE" identifier "SET" assignment_list
+                    ("WHERE" condition)?
+
+  delete         := "DELETE" "FROM" identifier ("WHERE" condition)?
+
+  create_branch  := "CREATE" "BRANCH" identifier "FROM" identifier
+
+  checkout       := "CHECKOUT" identifier
+
+  merge          := "MERGE" identifier "INTO" identifier
+
+  diff           := "DIFF" identifier identifier
+
+  show_history   := "SHOW" "HISTORY" identifier ("WHERE" condition)?
+
+  condition      := expression (("=" | "!=" | "<" | ">" | "<=" | ">=" |
+                    "LIKE") expression)?
+                    ("AND" | "OR" condition)?
+
+  expression     := term (("+" | "-") term)*
+  term           := factor (("*" | "/") factor)*
+  factor         := number | string | identifier | "(" expression ")"
+
+AST NODE TYPES:
+  enum Statement {
+      CreateTable(CreateTableStmt),
+      Select(SelectStmt),
+      Insert(InsertStmt),
+      Update(UpdateStmt),
+      Delete(DeleteStmt),
+      CreateBranch(CreateBranchStmt),
+      Checkout(CheckoutStmt),
+      Merge(MergeStmt),
+      Diff(DiffStmt),
+      ShowHistory(ShowHistoryStmt),
+  }
+
+  struct SelectStmt {
+      columns: Vec<ColumnRef>,
+      table: String,
+      as_of: Option<Timestamp>,
+      where_clause: Option<Condition>,
+      order_by: Vec<OrderClause>,
+      limit: Option<usize>,
+  }
+
+  enum Condition {
+      Comparison {
+          left: Expression,
+          op: CompareOp,
+          right: Expression,
+      },
+      And(Box<Condition>, Box<Condition>),
+      Or(Box<Condition>, Box<Condition>),
+      Not(Box<Condition>),
+  }
+
+  enum Expression {
+      Column(String),
+      Literal(Value),
+      BinaryOp(Box<Expression>, Op, Box<Expression>),
+  }
+
+RECURSIVE DESCENT PARSER (Pseudocode):
+  struct Parser {
+      tokens: Vec<Token>,
+      pos: usize,
+  }
+
+  impl Parser {
+      fn parse_statement(&mut self) -> Result<Statement> {
+          match self.peek() {
+              Token::Create  => self.parse_create(),
+              Token::Select  => self.parse_select(),
+              Token::Insert  => self.parse_insert(),
+              Token::Update  => self.parse_update(),
+              Token::Delete  => self.parse_delete(),
+              Token::Checkout=> self.parse_checkout(),
+              Token::Merge   => self.parse_merge(),
+              Token::Diff    => self.parse_diff(),
+              Token::Show    => self.parse_show_history(),
+              _ => Err(ParseError::UnexpectedToken),
+          }
+      }
+
+      fn parse_select(&mut self) -> Result<Statement> {
+          self.expect(Token::Select)?;
+          let columns = self.parse_select_list()?;
+          self.expect(Token::From)?;
+          let table = self.expect_identifier()?;
+
+          let as_of = if self.match_token(Token::As) {
+              self.expect(Token::Of)?;
+              Some(self.parse_timestamp()?)
+          } else {
+              None
+          };
+
+          let where_clause = if self.match_token(Token::Where) {
+              Some(self.parse_condition()?)
+          } else {
+              None
+          };
+
+          // ... order_by, limit
+          Ok(Statement::Select(SelectStmt { ... }))
+      }
+
+      // Helper methods
+      fn peek(&self) -> &Token { &self.tokens[self.pos] }
+      fn advance(&mut self) -> &Token { ... }
+      fn expect(&mut self, expected: Token) -> Result<()> { ... }
+      fn match_token(&mut self, token: Token) -> bool { ... }
+  }
+
+--------------------------------------------------------------------------------
+4.3 STORAGE ENGINE - PAGE MANAGER
+--------------------------------------------------------------------------------
+
+PURPOSE: Manage disk I/O in fixed-size pages (like real databases).
+
+DISK LAYOUT:
+  +----------------------------------------------------------------+
+  |                       DISK FILE (data.db)                       |
+  |                                                                |
+  |  +--------+  +--------+  +--------+  +--------+  +--------+   |
+  |  |Page 0  |  |Page 1  |  |Page 2  |  |Page 3  |  |Page 4  |   |
+  |  |(Header)|  |(Table  |  |(Index  |  |(Data)  |  |(Data)  |   |
+  |  |        |  |Catalog)|  |B+Tree  |  |        |  |        |   |
+  |  +--------+  +--------+  +--------+  +--------+  +--------+   |
+  |                                                                |
+  |  Page Size = 4096 bytes (4 KB) - configurable                   |
+  +----------------------------------------------------------------+
+
+PAGE STRUCTURE (4096 bytes):
+  +------------------------------------------+
+  | Page Header (64 bytes)                   |
+  |   - page_id: u32                         |
+  |   - page_type: u8 (data/index/catalog)   |
+  |   - free_space_ptr: u16                  |
+  |   - num_slots: u16                       |
+  |   - checksum: u32                        |
+  |   - lsn: u64 (log sequence number)       |
+  +------------------------------------------+
+  | Slot Directory (variable)                |
+  |   - offset + length per tuple            |
+  +------------------------------------------+
+  | Free Space                               |
+  +------------------------------------------+
+  | Tuple Data (grows upward)                |
+  |   - Tuple 1: [version_chain_ptr][cols..] |
+  |   - Tuple 2: [version_chain_ptr][cols..] |
+  |   - ...                                  |
+  +------------------------------------------+
+
+PAGE MANAGER (Pseudocode):
+  struct PageManager {
+      file: File,
+      page_size: usize,        // 4096
+      total_pages: usize,
+  }
+
+  impl Page
