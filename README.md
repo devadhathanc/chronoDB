@@ -2,6 +2,8 @@
 
 **ChronoDB** is a zero-dependency relational database engine built from scratch in Rust with native **MVCC time-travel (`AS OF`)**, **Git-like branching and 3-way DAG merging (`CREATE BRANCH`, `CHECKOUT`, `DIFF`, `MERGE`)**, **logarithmic temporal invariant bisection (`BISECT`)**, and **counterfactual execution (`WHAT IF`)**.
 
+![ChronoDB Terminal Demo](assets/demo.gif)
+
 ## Key Architecture & Features
 
 | Component | Module | Implementation Highlights |
